@@ -1,18 +1,23 @@
 import mongoose, { Document, Schema } from "mongoose";
 
-// Delivery User Interface
-export interface IDeliveryUser extends Document {
+// Organization Admin Interface
+export interface IOrganizationAdmin extends Document {
   _id: mongoose.Types.ObjectId;
   name: string;
   email: string;
   password: string;
   organizationId: mongoose.Types.ObjectId;
-  phone: string;
-  vehicleType: string;
-  licenseNumber: string;
   status: "active" | "inactive" | "suspended";
+  permissions: {
+    canManageUsers: boolean;
+    canViewReports: boolean;
+    canManageSettings: boolean;
+    canViewAnalytics: boolean;
+    canManageDeliveryUsers: boolean;
+    canViewLiveTracking: boolean;
+  };
   lastLogin?: Date;
-  createdBy: mongoose.Types.ObjectId; // Organization Admin who created this user
+  createdBy: mongoose.Types.ObjectId; // Super Admin who created this admin
   createdAt: Date;
   updatedAt: Date;
   // Virtual fields
@@ -20,8 +25,8 @@ export interface IDeliveryUser extends Document {
   createdByName?: string;
 }
 
-// Delivery User Schema
-const deliveryUserSchema = new Schema<IDeliveryUser>(
+// Organization Admin Schema
+const organizationAdminSchema = new Schema<IOrganizationAdmin>(
   {
     name: {
       type: String,
@@ -52,37 +57,43 @@ const deliveryUserSchema = new Schema<IDeliveryUser>(
       ref: "Organization",
       required: [true, "Organization is required"],
     },
-    phone: {
-      type: String,
-      required: [true, "Phone number is required"],
-      trim: true,
-      match: [/^[\+]?[1-9][\d]{0,15}$/, "Please provide a valid phone number"],
-    },
-    vehicleType: {
-      type: String,
-      required: [true, "Vehicle type is required"],
-      enum: ["bike", "motorcycle", "car", "van", "truck"],
-      default: "bike",
-    },
-    licenseNumber: {
-      type: String,
-      required: [true, "License number is required"],
-      trim: true,
-      uppercase: true,
-      minlength: [5, "License number must be at least 5 characters"],
-      maxlength: [20, "License number cannot exceed 20 characters"],
-    },
     status: {
       type: String,
       enum: ["active", "inactive", "suspended"],
       default: "active",
+    },
+    permissions: {
+      canManageUsers: {
+        type: Boolean,
+        default: true,
+      },
+      canViewReports: {
+        type: Boolean,
+        default: true,
+      },
+      canManageSettings: {
+        type: Boolean,
+        default: true,
+      },
+      canViewAnalytics: {
+        type: Boolean,
+        default: true,
+      },
+      canManageDeliveryUsers: {
+        type: Boolean,
+        default: true,
+      },
+      canViewLiveTracking: {
+        type: Boolean,
+        default: true,
+      },
     },
     lastLogin: {
       type: Date,
     },
     createdBy: {
       type: Schema.Types.ObjectId,
-      ref: "OrganizationAdmin",
+      ref: "User",
       required: [true, "Created by is required"],
     },
   },
@@ -102,15 +113,14 @@ const deliveryUserSchema = new Schema<IDeliveryUser>(
 );
 
 // Indexes for better query performance
-deliveryUserSchema.index({ email: 1 });
-deliveryUserSchema.index({ organizationId: 1 });
-deliveryUserSchema.index({ status: 1 });
-deliveryUserSchema.index({ createdBy: 1 });
-deliveryUserSchema.index({ createdAt: -1 });
-deliveryUserSchema.index({ vehicleType: 1 });
+organizationAdminSchema.index({ email: 1 });
+organizationAdminSchema.index({ organizationId: 1 });
+organizationAdminSchema.index({ status: 1 });
+organizationAdminSchema.index({ createdBy: 1 });
+organizationAdminSchema.index({ createdAt: -1 });
 
 // Virtual for organization name (populated)
-deliveryUserSchema.virtual("organizationName", {
+organizationAdminSchema.virtual("organizationName", {
   ref: "Organization",
   localField: "organizationId",
   foreignField: "_id",
@@ -118,15 +128,15 @@ deliveryUserSchema.virtual("organizationName", {
 });
 
 // Virtual for created by name (populated)
-deliveryUserSchema.virtual("createdByName", {
-  ref: "OrganizationAdmin",
+organizationAdminSchema.virtual("createdByName", {
+  ref: "User",
   localField: "createdBy",
   foreignField: "_id",
   justOne: true,
 });
 
 // Pre-save middleware to validate organization exists
-deliveryUserSchema.pre("save", async function (next) {
+organizationAdminSchema.pre("save", async function (next) {
   try {
     const Organization = mongoose.model("Organization");
     const organization = await Organization.findById(this.organizationId);
@@ -141,8 +151,8 @@ deliveryUserSchema.pre("save", async function (next) {
   }
 });
 
-// Static method to find user by email with organization populated
-deliveryUserSchema.statics.findByEmailWithOrganization = function (
+// Static method to find admin by email with organization populated
+organizationAdminSchema.statics.findByEmailWithOrganization = function (
   email: string
 ) {
   return this.findOne({ email })
@@ -151,8 +161,8 @@ deliveryUserSchema.statics.findByEmailWithOrganization = function (
     .select("+password");
 };
 
-// Static method to find users by organization
-deliveryUserSchema.statics.findByOrganization = function (
+// Static method to find admins by organization
+organizationAdminSchema.statics.findByOrganization = function (
   organizationId: string
 ) {
   return this.find({ organizationId })
@@ -161,59 +171,51 @@ deliveryUserSchema.statics.findByOrganization = function (
     .sort({ createdAt: -1 });
 };
 
-// Static method to find active users
-deliveryUserSchema.statics.findActiveUsers = function () {
+// Static method to find active admins
+organizationAdminSchema.statics.findActiveAdmins = function () {
   return this.find({ status: "active" })
     .populate("organizationId", "name companyName")
     .populate("createdBy", "name email")
     .sort({ createdAt: -1 });
 };
 
-// Static method to find users by vehicle type
-deliveryUserSchema.statics.findByVehicleType = function (
-  vehicleType: string,
-  organizationId?: string
-) {
-  const query: any = { vehicleType };
-  if (organizationId) {
-    query.organizationId = organizationId;
-  }
-  return this.find(query)
-    .populate("organizationId", "name companyName")
-    .populate("createdBy", "name email")
-    .sort({ createdAt: -1 });
-};
-
 // Instance method to update last login
-deliveryUserSchema.methods.updateLastLogin = function () {
+organizationAdminSchema.methods.updateLastLogin = function () {
   this.lastLogin = new Date();
   return this.save();
 };
 
-// Instance method to check if user is active
-deliveryUserSchema.methods.isActive = function () {
+// Instance method to check if admin is active
+organizationAdminSchema.methods.isActive = function () {
   return this.status === "active";
 };
 
-// Instance method to check if user belongs to organization
-deliveryUserSchema.methods.belongsToOrganization = function (
+// Instance method to check if admin belongs to organization
+organizationAdminSchema.methods.belongsToOrganization = function (
   organizationId: string
 ) {
   return this.organizationId?.toString() === organizationId;
 };
 
-// Instance method to update status
-deliveryUserSchema.methods.updateStatus = function (
-  status: "active" | "inactive" | "suspended"
+// Instance method to check specific permission
+organizationAdminSchema.methods.hasPermission = function (
+  permission: keyof IOrganizationAdmin["permissions"]
 ) {
-  this.status = status;
+  return this.permissions[permission] === true;
+};
+
+// Instance method to update permissions
+organizationAdminSchema.methods.updatePermissions = function (
+  newPermissions: Partial<IOrganizationAdmin["permissions"]>
+) {
+  this.permissions = { ...this.permissions, ...newPermissions };
   return this.save();
 };
 
 // Create and export the model
-const DeliveryUser = mongoose.model<IDeliveryUser>(
-  "DeliveryUser",
-  deliveryUserSchema
+const OrganizationAdmin = mongoose.model<IOrganizationAdmin>(
+  "OrganizationAdmin",
+  organizationAdminSchema
 );
 
-export default DeliveryUser;
+export default OrganizationAdmin;

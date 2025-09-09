@@ -1,6 +1,5 @@
 import http from "http";
 import mongoose from "mongoose";
-import { Server } from "socket.io";
 import app from "./app";
 
 const PORT = process.env.PORT || 5000;
@@ -10,20 +9,15 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/geotrack";
 const server = http.createServer(app);
 
 // Socket.io setup
-const io = new Server(server, {
-  cors: {
-    origin: "*", // in production, restrict this
-    methods: ["GET", "POST"],
-  },
-});
+// const io = new Server(server, {
+//   cors: {
+//     origin: "*", // in production, restrict this
+//     methods: ["GET", "POST"],
+//   },
+// });
 
-io.on("connection", (socket) => {
-  console.log("🔌 New client connected:", socket.id);
-
-  socket.on("disconnect", () => {
-    console.log("❌ Client disconnected:", socket.id);
-  });
-});
+// Initialize real-time tracking service
+// RealtimeTrackingService.initialize(io);
 
 // Connect to MongoDB
 mongoose
